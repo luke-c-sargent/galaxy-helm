@@ -1,0 +1,16 @@
+apiVersion: v1
+metadata:
+  name: {{ include "galaxy.fullname" . }}-scripts
+  labels:
+    app.kubernetes.io/name: {{ include "galaxy.name" . }}
+    helm.sh/chart: {{ include "galaxy.chart" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+kind: ConfigMap
+data:
+  {{- range $key, $entry := .Values.scripts -}}
+  {{- if $entry -}}
+  {{- $key | nindent 2 }}: |
+    {{- tpl (tpl $entry $) $ | nindent 4 -}}
+  {{- end }}
+  {{- end }}

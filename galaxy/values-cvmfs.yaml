@@ -105,6 +105,11 @@ cvmfs:
 # when it is set to false, all configs will be set in configmaps
 useSecretConfigs: false
 
+# readiness and liveness probe parameters : {{ .Values.probeConfig.* }}
+probeConfig:
+  probeInterval: 60
+  probeLocation: /tmp
+
 # All files will be relative to `/galaxy/server/config/` directory
 configs:
   job_conf.xml: |
@@ -168,6 +173,9 @@ configs:
       containers_resolvers_config_file: "/galaxy/server/config/container_resolvers_conf.xml"
       workflow_schedulers_config_file: "/galaxy/server/config/workflow_schedulers_conf.xml"
       build_sites_config_file: "/galaxy/server/config/build_sites.yml"
+      probe_liveness: true
+      liveness_probe_directory: {{ .Values.probeConfig.probeLocation }}
+      liveness_probe_interval: {{ .Values.probeConfig.probeInterval }}
   container_resolvers_conf.xml: |
     <containers_resolvers>
       <explicit />
@@ -359,6 +367,28 @@ configs:
       </section>
       <label id="miscellaneous_tools_label" text="Miscellaneous Tools"/>
     </toolbox>
+
+scripts:
+  prober.sh: |
+    function timediff {
+      lastUpdate="$(stat -c %Y $1)"
+      now="$(date +%s)"
+      let diff="${now}-${lastUpdate}"
+      if [ "$diff" -gt "$2" ]; then
+        echo "$1 was last modified $diff seconds ago (>$2); liveness failed"
+        exit 1
+      fi
+    }
+
+    array=()
+    while IFS=  read -r -d $'\0'; do
+        array+=("$REPLY")
+    done < <(find {{ .Values.probeConfig.probeLocation }} -name "liveprobe*" -type f -print0)
+
+    for i in "${array[@]}"
+    do
+            timediff $i $(({{ .Values.probeConfig.probeInterval }} + 10))
+    done
 
 jobs:
   rules:

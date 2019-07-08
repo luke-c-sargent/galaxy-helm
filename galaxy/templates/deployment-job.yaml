@@ -60,8 +60,29 @@ spec:
               value: postgresql://{{ .Values.postgresql.galaxyDatabaseUser }}:$(GALAXY_DB_USER_PASSWORD)@{{ template "galaxy-postgresql.fullname" . }}/galaxy
           command: ["python", "/galaxy/server/scripts/galaxy-main"]
           args: ["-c", "/galaxy/server/config/galaxy.yml", "--server-name", "$(POD_NAME)", "--attach-to-pool", "job-handlers"]
+          readinessProbe:
+            exec:
+              command:
+                - "/bin/bash"
+                - "-c"
+                - "test -f liveprobe*"
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            failureThreshold: 120 # ~10 minutes
+          livenessProbe:
+            exec:
+              command:
+                - "/bin/bash"
+                - "/galaxy/server/scripts/prober.sh"
+            initialDelaySeconds: 10
+            periodSeconds: {{ .Values.probeConfig.probeInterval }}
           volumeMounts:
             {{- range $key,$entry := .Values.configs }}
+            - name: galaxy-scripts
+              mountPath: /galaxy/server/scripts/{{ $key }}
+              subPath: {{ $key }}
+            {{- end }}
+            {{- range $key,$entry := .Values.scripts }}
             - name: galaxy-conf-files
               mountPath: /galaxy/server/config/{{ $key }}
               subPath: {{ $key }}
@@ -85,6 +106,9 @@ spec:
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
       volumes:
+        - name: galaxy-scripts
+          configMap:
+            name: {{ template "galaxy.fullname" . }}-scripts
         - name: galaxy-conf-files
           {{- if .Values.useSecretConfigs }}
           secret:
